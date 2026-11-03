@@ -72,7 +72,7 @@ function startAlarmSpeechLoop(spokenPhrase, rate) {
       if (activeRingingAlarm) {
         startAlarmSpeechLoop(spokenPhrase, rate);
       }
-    }, 2000);
+    }, 500);
   });
 }
 
