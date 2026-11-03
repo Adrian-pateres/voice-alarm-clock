@@ -22,7 +22,6 @@
       canvas.height = 512;
       const ctx = canvas.getContext('2d');
 
-      // 1. Background Gradient (Deep Indigo to Violet)
       const bgGrad = ctx.createLinearGradient(0, 0, 512, 512);
       bgGrad.addColorStop(0, '#090d16');
       bgGrad.addColorStop(0.5, '#1e1b4b');
@@ -30,14 +29,12 @@
       ctx.fillStyle = bgGrad;
       ctx.fillRect(0, 0, 512, 512);
 
-      // 2. Ambient Cyan Glow
       const glow = ctx.createRadialGradient(256, 256, 30, 256, 256, 230);
       glow.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
       glow.addColorStop(1, 'rgba(9, 13, 22, 0)');
       ctx.fillStyle = glow;
       ctx.fillRect(0, 0, 512, 512);
 
-      // 3. Outer Soundwave Rings
       ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
       ctx.lineWidth = 10;
       ctx.beginPath();
@@ -47,7 +44,6 @@
       ctx.arc(256, 266, 185, Math.PI - 0.7, Math.PI + 0.7);
       ctx.stroke();
 
-      // 4. Alarm Clock Body
       const clockGrad = ctx.createLinearGradient(116, 126, 396, 406);
       clockGrad.addColorStop(0, '#38bdf8');
       clockGrad.addColorStop(1, '#6366f1');
@@ -61,24 +57,19 @@
 
       ctx.shadowColor = 'transparent';
 
-      // Inner Dark Clock Face
       ctx.fillStyle = '#0f172a';
       ctx.beginPath();
       ctx.arc(256, 266, 118, 0, Math.PI * 2);
       ctx.fill();
 
-      // 5. Clock Hands (Pointing to 7:35)
       ctx.strokeStyle = '#ffffff';
       ctx.lineCap = 'round';
-
-      // Hour hand
       ctx.lineWidth = 12;
       ctx.beginPath();
       ctx.moveTo(256, 266);
       ctx.lineTo(205, 310);
       ctx.stroke();
 
-      // Minute hand
       ctx.strokeStyle = '#38bdf8';
       ctx.lineWidth = 9;
       ctx.beginPath();
@@ -86,13 +77,11 @@
       ctx.lineTo(210, 345);
       ctx.stroke();
 
-      // Center Pin
       ctx.fillStyle = '#f43f5e';
       ctx.beginPath();
       ctx.arc(256, 266, 10, 0, Math.PI * 2);
       ctx.fill();
 
-      // 6. Top Voice Microphone / Bell Badge
       ctx.fillStyle = '#38bdf8';
       ctx.beginPath();
       ctx.roundRect(216, 72, 80, 32, 16);
@@ -142,11 +131,11 @@
         <span id="liveClockAmPm" class="text-lg font-bold text-sky-400">AM</span>
       </div>
 
-      <!-- Voice & WakeLock Status Bar -->
+      <!-- Voice, Motion & WakeLock Status Bar -->
       <div class="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between gap-2">
         <div class="flex items-center gap-2 text-left">
           <span id="voiceStatusDot" class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse"></span>
-          <span id="voiceStatusText" class="text-xs text-slate-300 font-medium">Tap "Activate Voice" for iOS audio</span>
+          <span id="voiceStatusText" class="text-xs text-slate-300 font-medium">Tap "Activate Voice" for iOS audio & shake snooze</span>
         </div>
         <button id="activateVoiceBtn" onclick="unlockVoiceAndWakeLock()" class="bg-sky-500 hover:bg-sky-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl shadow transition active:scale-95 shrink-0">
           🔊 Activate Voice
@@ -164,21 +153,18 @@
       </div>
 
       <form id="alarmForm" class="space-y-3.5">
-        <!-- Time Picker -->
         <div>
           <label class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Alarm Time</label>
           <input type="time" id="alarmTimeInput" required value="07:35"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-2xl font-bold text-white text-center focus:outline-none focus:border-sky-500" />
         </div>
 
-        <!-- Optional Spoken Label -->
         <div>
-          <label class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Spoken Label (Optional)</label>
-          <input type="text" id="alarmLabelInput" placeholder="e.g. Time to wake up, Morning class"
+          <label class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Alarm Note (Optional)</label>
+          <input type="text" id="alarmLabelInput" placeholder="e.g. Morning Class, Workout"
             class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-sky-500" />
         </div>
 
-        <!-- Repeat Mode -->
         <div class="grid grid-cols-2 gap-2">
           <div>
             <label class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Schedule</label>
@@ -192,9 +178,9 @@
           <div>
             <label class="text-[11px] uppercase tracking-wider text-slate-400 font-semibold block mb-1">Speech Speed</label>
             <select id="alarmRateInput" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2.5 text-xs font-semibold text-slate-200 focus:outline-none focus:border-sky-500">
-              <option value="0.9">Normal & Clear</option>
-              <option value="0.8">Slow & Calm</option>
-              <option value="1.05">Fast & Energetic</option>
+              <option value="1.2" selected>Fast (Default)</option>
+              <option value="1.35">Extra Fast</option>
+              <option value="1.0">Normal</option>
             </select>
           </div>
         </div>
@@ -212,40 +198,48 @@
         <span id="alarmCountText" class="text-xs text-slate-500">0 active</span>
       </div>
 
-      <div id="alarmsContainer" class="space-y-2.5">
-        <!-- Rendered dynamically from app.js -->
-      </div>
+      <div id="alarmsContainer" class="space-y-2.5"></div>
     </div>
 
   </main>
 
-  <!-- Bedside Nightstand Dim Mode Overlay (Keeps iPhone Awake Overnight) -->
+  <!-- Bedside Nightstand Dim Mode Overlay -->
   <div id="bedsideOverlay" onclick="toggleBedsideMode(false)" class="fixed inset-0 bg-black z-40 hidden flex-col items-center justify-center p-6 cursor-pointer select-none">
     <p class="text-xs uppercase tracking-widest text-slate-600 font-semibold mb-2">Bedside Nightstand Mode Active</p>
     <div class="flex items-baseline gap-2">
       <span id="bedsideClockTime" class="text-7xl font-black text-slate-400/80 tabular-nums">07:35</span>
       <span id="bedsideClockAmPm" class="text-2xl font-bold text-sky-700">AM</span>
     </div>
-    <p id="bedsideNextAlarm" class="text-xs text-slate-600 mt-4">Voice Engine Armed • Keep iPhone plugged in</p>
+    <p class="text-xs text-slate-600 mt-4">Voice & Shake-to-Snooze Armed • Keep iPhone plugged in</p>
     <p class="text-[11px] text-slate-700 mt-12 border border-slate-800 px-4 py-1.5 rounded-full">Tap anywhere to exit Bedside Mode</p>
   </div>
 
-  <!-- Active Ringing / Speaking Alarm Modal -->
-  <div id="ringingModal" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 hidden flex-col items-center justify-center p-6 text-center">
-    <div class="w-24 h-24 rounded-full bg-sky-500/20 border-2 border-sky-400 flex items-center justify-center animate-bounce mb-6 shadow-[0_0_50px_rgba(56,189,248,0.5)]">
-      <span class="text-4xl">🗣️</span>
+  <!-- Active Ringing / Speaking Alarm Modal (Tap anywhere on background to Snooze 5m) -->
+  <div id="ringingModal" onclick="snoozeCurrentAlarm()" class="fixed inset-0 bg-slate-950/95 backdrop-blur-md z-50 hidden flex-col items-center justify-between p-6 text-center cursor-pointer">
+    
+    <div class="mt-6">
+      <span class="inline-block bg-sky-500/15 border border-sky-500/30 text-sky-300 text-xs font-bold px-3.5 py-1.5 rounded-full">
+        💤 Press Volume Up/Down, Shake Phone, or Tap Screen to Snooze (5m)
+      </span>
     </div>
 
-    <p class="text-xs uppercase tracking-widest text-sky-400 font-bold mb-1">Speaking Time Alarm</p>
-    <h2 id="ringingTimeDisplay" class="text-6xl font-black text-white tracking-tight my-2">7:35 AM</h2>
-    <p id="ringingLabelDisplay" class="text-base text-slate-300 font-medium max-w-xs mb-8">"It is 7:35 AM"</p>
+    <div class="flex flex-col items-center my-auto">
+      <div class="w-24 h-24 rounded-full bg-sky-500/20 border-2 border-sky-400 flex items-center justify-center animate-bounce mb-6 shadow-[0_0_50px_rgba(56,189,248,0.5)]">
+        <span class="text-4xl">🗣️</span>
+      </div>
 
-    <div class="w-full max-w-xs space-y-3">
-      <button onclick="stopCurrentAlarm()" class="w-full bg-rose-600 hover:bg-rose-500 active:scale-95 transition text-white font-extrabold py-4 rounded-2xl text-base shadow-xl">
-        STOP ALARM
+      <p class="text-xs uppercase tracking-widest text-sky-400 font-bold mb-1">Speaking Time Alarm</p>
+      <h2 id="ringingTimeDisplay" class="text-6xl font-black text-white tracking-tight my-2">7:35 AM</h2>
+      <p id="ringingLabelDisplay" class="text-base text-slate-300 font-medium max-w-xs mb-3">"7:35 AM"</p>
+      <p class="text-xs text-slate-400">Tap anywhere on this dark screen for 5-Min Snooze</p>
+    </div>
+
+    <div class="w-full max-w-xs space-y-3 mb-4">
+      <button onclick="event.stopPropagation(); snoozeCurrentAlarm();" class="w-full bg-amber-500 hover:bg-amber-400 active:scale-95 transition text-slate-950 font-extrabold py-3.5 rounded-2xl text-sm shadow-lg">
+        SNOOZE (5 MINUTES)
       </button>
-      <button onclick="snoozeCurrentAlarm()" class="w-full bg-slate-800 hover:bg-slate-700 border border-slate-700 active:scale-95 transition text-slate-200 font-bold py-3.5 rounded-2xl text-sm">
-        Snooze (5 Minutes)
+      <button onclick="event.stopPropagation(); stopCurrentAlarm();" class="w-full bg-rose-600 hover:bg-rose-500 active:scale-95 transition text-white font-extrabold py-4 rounded-2xl text-base shadow-xl">
+        STOP ALARM
       </button>
     </div>
   </div>
