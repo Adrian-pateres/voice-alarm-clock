@@ -5,14 +5,13 @@ let wakeLockRef = null;
 let activeRingingAlarm = null;
 let speechLoopTimeout = null;
 let lastTriggeredMinuteKey = '';
+let lastShakeTime = 0;
 
-// Save alarms to localStorage
 function saveAlarms() {
   localStorage.setItem('voice_alarms_list', JSON.stringify(alarms));
 }
 
 // 2. Time Formatting Helpers
-// Converts "07:35" -> { formatted: "7:35 AM", hour12: 7, minute: 35, ampm: "AM" }
 function parse24HourTime(timeStr) {
   const [rawHours, rawMinutes] = timeStr.split(':').map(Number);
   const ampm = rawHours >= 12 ? 'PM' : 'AM';
@@ -26,7 +25,7 @@ function parse24HourTime(timeStr) {
   };
 }
 
-// Returns ONLY the time string (e.g., "7:35 AM") with no extra sentences
+// Speaks ONLY the time (e.g., "7:35 AM")
 function buildSpokenTimePhrase(timeStr) {
   const { formatted } = parse24HourTime(timeStr);
   return formatted;
@@ -35,7 +34,6 @@ function buildSpokenTimePhrase(timeStr) {
 // 3. Speech Synthesis (Text-to-Speech) Engine
 function speakText(text, rate = 1.2, onComplete = null) {
   if (!('speechSynthesis' in window)) {
-    alert('Speech Synthesis is not supported on this browser.');
     return;
   }
 
@@ -43,11 +41,10 @@ function speakText(text, rate = 1.2, onComplete = null) {
 
   const utterance = new SpeechSynthesisUtterance(text);
   utterance.lang = 'en-US';
-  utterance.rate = parseFloat(rate) || 1.2; // Default faster speech rate
+  utterance.rate = parseFloat(rate) || 1.2;
   utterance.pitch = 1.0;
   utterance.volume = 1.0;
 
-  // Prefer natural English voice on iOS
   const voices = window.speechSynthesis.getVoices();
   const preferredVoice = voices.find(
     v => v.lang.startsWith('en') && (v.name.includes('Samantha') || v.name.includes('Siri') || v.default)
@@ -64,7 +61,7 @@ function speakText(text, rate = 1.2, onComplete = null) {
   window.speechSynthesis.speak(utterance);
 }
 
-// Loop helper: speaks the time, waits 100 seconds after finishing, then repeats
+// Loop helper: speaks the time, waits 2 seconds after finishing, then repeats
 function startAlarmSpeechLoop(spokenPhrase, rate) {
   if (!activeRingingAlarm) return;
 
@@ -75,20 +72,101 @@ function startAlarmSpeechLoop(spokenPhrase, rate) {
       if (activeRingingAlarm) {
         startAlarmSpeechLoop(spokenPhrase, rate);
       }
-    }, 100); // 100 seconds pause before repeating
+    }, 2000);
   });
 }
 
-// 4. Unlock iOS Voice Engine & Request Screen Wake Lock
+// 4. Hardware Volume Buttons, Media Buttons & Shake-to-Snooze Listeners
+function handleHardwareVolumeOrKeySnooze(e) {
+  if (!activeRingingAlarm) return;
+
+  const volumeKeys = [
+    'AudioVolumeUp',
+    'AudioVolumeDown',
+    'AudioVolumeMute',
+    'VolumeUp',
+    'VolumeDown',
+    'VolumeMute'
+  ];
+  const volumeKeyCodes = [24, 25, 173, 174, 175]; // Android & Standard Hardware Volume KeyCodes
+
+  if (
+    volumeKeys.includes(e.key) ||
+    volumeKeys.includes(e.code) ||
+    volumeKeyCodes.includes(e.keyCode) ||
+    volumeKeyCodes.includes(e.which)
+  ) {
+    e.preventDefault();
+    snoozeCurrentAlarm();
+  }
+}
+
+window.addEventListener('keydown', handleHardwareVolumeOrKeySnooze, { passive: false });
+window.addEventListener('keyup', handleHardwareVolumeOrKeySnooze, { passive: false });
+
+// Physical Shake / Nudge Sensor (Works on iPhone & Android when alarm is ringing)
+function handleDeviceMotionSnooze(event) {
+  if (!activeRingingAlarm) return;
+
+  const acc = event.accelerationIncludingGravity;
+  if (!acc) return;
+
+  const totalAcceleration = Math.sqrt(
+    (acc.x || 0) * (acc.x || 0) +
+    (acc.y || 0) * (acc.y || 0) +
+    (acc.z || 0) * (acc.z || 0)
+  );
+
+  // Normal gravity is ~9.8 m/s^2. A light shake or nudge exceeds 16.5 m/s^2
+  const now = Date.now();
+  if (totalAcceleration > 16.5 && now - lastShakeTime > 1500) {
+    lastShakeTime = now;
+    snoozeCurrentAlarm();
+  }
+}
+
+window.addEventListener('devicemotion', handleDeviceMotionSnooze);
+
+// Setup MediaSession API so headset/lockscreen controls also trigger Snooze
+function registerMediaSessionSnooze() {
+  if ('mediaSession' in navigator) {
+    const actions = ['pause', 'stop', 'previoustrack', 'nexttrack', 'seekbackward', 'seekforward'];
+    actions.forEach(action => {
+      try {
+        navigator.mediaSession.setActionHandler(action, () => {
+          if (activeRingingAlarm) {
+            snoozeCurrentAlarm();
+          }
+        });
+      } catch (e) {}
+    });
+  }
+}
+
+// 5. Unlock iOS Voice Engine, Motion Sensor Permission & Screen Wake Lock
 async function unlockVoiceAndWakeLock(silent = false) {
   isVoiceUnlocked = true;
+
+  // Request iOS 13+ Motion Sensor Permission for Shake-to-Snooze
+  if (
+    typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission === 'function'
+  ) {
+    try {
+      await DeviceMotionEvent.requestPermission();
+    } catch (err) {
+      console.log('Motion permission note:', err.message);
+    }
+  }
+
+  registerMediaSessionSnooze();
 
   const dot = document.getElementById('voiceStatusDot');
   const statusText = document.getElementById('voiceStatusText');
   const btn = document.getElementById('activateVoiceBtn');
 
   dot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
-  statusText.textContent = 'Voice Engine Armed & Screen Awake';
+  statusText.textContent = 'Voice, Shake-Snooze & WakeLock Armed';
   btn.textContent = '✅ Armed';
   btn.className = 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs px-3.5 py-1.5 rounded-xl shrink-0';
 
@@ -114,7 +192,7 @@ document.addEventListener('visibilitychange', async () => {
   }
 });
 
-// 5. Test / Preview Voice Button
+// 6. Test / Preview Voice Button
 function previewSelectedTimeVoice() {
   unlockVoiceAndWakeLock(true);
   const timeVal = document.getElementById('alarmTimeInput').value || '07:35';
@@ -124,7 +202,7 @@ function previewSelectedTimeVoice() {
   speakText(phrase, rateVal);
 }
 
-// 6. Live Clock & Every-Second Alarm Checker
+// 7. Live Clock & Every-Second Alarm Checker
 function updateLiveClockAndCheckAlarms() {
   const now = new Date();
 
@@ -177,9 +255,10 @@ function updateLiveClockAndCheckAlarms() {
   }
 }
 
-// 7. Trigger, 2-Second Loop, Snooze, and Stop Alarm
+// 8. Trigger, 2-Second Loop, 5-Min Snooze, and Stop Alarm
 function triggerVoiceAlarm(alarm) {
   activeRingingAlarm = alarm;
+  lastShakeTime = Date.now(); // Prevent accidental instant shake right on trigger
 
   if (alarm.repeat === 'once') {
     alarm.enabled = false;
@@ -213,6 +292,8 @@ function stopCurrentAlarm() {
 }
 
 function snoozeCurrentAlarm() {
+  if (!activeRingingAlarm) return;
+
   const alarmToSnooze = activeRingingAlarm;
   stopCurrentAlarm();
 
@@ -223,7 +304,7 @@ function snoozeCurrentAlarm() {
   const snoozeAlarm = {
     id: 'alm_' + Date.now(),
     time: `${snoozeHH}:${snoozeMM}`,
-    label: alarmToSnooze && alarmToSnooze.label ? `${alarmToSnooze.label} (Snooze)` : 'Snooze',
+    label: alarmToSnooze && alarmToSnooze.label ? `${alarmToSnooze.label} (Snooze)` : 'Snooze (5m)',
     repeat: 'once',
     rate: alarmToSnooze ? alarmToSnooze.rate : '1.2',
     enabled: true
@@ -232,9 +313,12 @@ function snoozeCurrentAlarm() {
   alarms.unshift(snoozeAlarm);
   saveAlarms();
   renderAlarms();
+
+  // Audible confirmation so you know it snoozed without looking at the screen
+  speakText('Snoozed, 5 minutes', 1.2);
 }
 
-// 8. Add, Toggle, and Delete Alarms
+// 9. Add, Toggle, and Delete Alarms
 document.getElementById('alarmForm').addEventListener('submit', function (e) {
   e.preventDefault();
   unlockVoiceAndWakeLock(true);
@@ -260,7 +344,6 @@ document.getElementById('alarmForm').addEventListener('submit', function (e) {
   document.getElementById('alarmLabelInput').value = '';
   renderAlarms();
 
-  // Confirm by speaking ONLY the time
   speakText(buildSpokenTimePhrase(time), rate);
 });
 
@@ -279,7 +362,7 @@ function deleteAlarm(id) {
   renderAlarms();
 }
 
-// 9. Bedside Nightstand Mode Toggle
+// 10. Bedside Nightstand Mode Toggle
 function toggleBedsideMode(show) {
   const overlay = document.getElementById('bedsideOverlay');
   if (show) {
@@ -292,7 +375,7 @@ function toggleBedsideMode(show) {
   }
 }
 
-// 10. Render Alarms List
+// 11. Render Alarms List
 function renderAlarms() {
   const container = document.getElementById('alarmsContainer');
   const countText = document.getElementById('alarmCountText');
@@ -358,23 +441,10 @@ function renderAlarms() {
   });
 }
 
-// Configure faster default speed options on load
-function setupFastRateOptions() {
-  const rateSelect = document.getElementById('alarmRateInput');
-  if (rateSelect) {
-    rateSelect.innerHTML = `
-      <option value="1.2" selected>Fast (Default)</option>
-      <option value="1.35">Extra Fast</option>
-      <option value="1.0">Normal</option>
-    `;
-  }
-}
-
 // Initialize App
 if ('speechSynthesis' in window) {
   window.speechSynthesis.getVoices();
 }
-setupFastRateOptions();
 renderAlarms();
 updateLiveClockAndCheckAlarms();
 setInterval(updateLiveClockAndCheckAlarms, 1000);
